@@ -5,23 +5,7 @@ import { runCommand } from "./utils";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path"
 import { set } from "lodash";
-
-type Choice<Value> = {
-    value: Value;
-    name?: string;
-    description?: string;
-    short?: string;
-    disabled?: boolean | string;
-    type?: never;
-};
-
-type ChoiceOption = Choice<string> | string;
-
-interface CommandOption {
-    framework?: string;
-    language: string;
-    lints: string[];
-}
+import { ChoiceOption, CommandOption, Choice } from "./types";
 
 const argv = minimist<{
     template?: string
@@ -47,6 +31,7 @@ const frameworkList: ChoiceOption[] = [{
     description: 'npm packages that don\'t require a framework'
 }, 'react', 'vue'];
 const lintList: ChoiceOption[] = ['commitlint', 'eslint', 'lint-staged', 'prettier', 'stylelint'];
+const styleList: ChoiceOption[] = ['css', 'scss', 'less'];
 const pkgPath = resolve(cwd, 'package.json');
 
 function genChoices(options: ChoiceOption[]) {
@@ -86,6 +71,11 @@ function genEslintConfig(config: CommandOption) {
     writeFileSync(resolve(cwd, 'eslint.config.js'), configContent, 'utf-8');
 }
 
+function genPrettierConfig(config: CommandOption) {
+    const configContent = readFileSync(resolve(__dirname, `../templates/prettier/index.js`), 'utf8');
+    writeFileSync(resolve(cwd, 'prettier.config.js '), configContent, 'utf-8');
+}
+
 async function init() {
     const language = await select({
         message: 'Select a language:',
@@ -101,16 +91,29 @@ async function init() {
         message: 'Select tools you need:',
         choices: genChoices(lintList),
     });
+    let style = 'css';
     const config: CommandOption = {
         language,
         framework,
         lints,
     }
-
     const needEslint = lints.includes('eslint');
-    if (needEslint) genEslintConfig(config);
-
+    const needPrettier = lints.includes('prettier');
     const needHusky = lints.some(lint => ['commitlint', 'lint-staged'].includes(lint));
+    const needCommitLint = lints.includes('commitlint');
+    const needStyleLint = lints.includes('styleLint');
+    if (needStyleLint) {
+        style = await checkbox({
+            message: 'Select tools you need:',
+            choices: genChoices(styleList),
+        });
+    }
+
+    const dependencies = [];
+
+
+    if (needEslint) genEslintConfig(config);
+    if (needPrettier) genPrettierConfig(config);
     if (needHusky) await installHusky();
 }
 

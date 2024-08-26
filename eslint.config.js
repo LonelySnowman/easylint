@@ -5,13 +5,15 @@ module.exports = {
         node: true,
     },
     extends: [
-        'eslint:recommended'
+        'eslint:recommended',
+        'plugin:@typescript-eslint/recommended',
     ],
     overrides: [],
+    parser: '@typescript-eslint/parser',
     parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
     },
-    plugins: ['vue', '@typescript-eslint'],
+    plugins: ['@typescript-eslint'],
     rules: {},
 };
