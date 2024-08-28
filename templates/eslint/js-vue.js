@@ -1,19 +1,14 @@
-module.exports = {
-    env: {
-        browser: true,
-        es2021: true,
-        node: true,
+import globals from "globals";
+import pluginJs from "@eslint/js";
+import pluginVue from "eslint-plugin-vue";
+
+export default [
+    {
+        files: ["**/*.{js,mjs,cjs,ts,vue}"]
     },
-    extends: [
-        'plugin:vue/vue3-recommended',
-    ],
-    overrides: [],
-    parser: 'vue-eslint-parser',
-    parserOptions: {
-        ecmaVersion: 'latest',
-        parser: '@typescript-eslint/parser',
-        sourceType: 'module',
+    {
+        languageOptions: { globals: { ...globals.browser } }
     },
-    plugins: ['vue', '@typescript-eslint'],
-    rules: {},
-};
+    pluginJs.configs.recommended,
+    ...pluginVue.configs["flat/essential"],
+];

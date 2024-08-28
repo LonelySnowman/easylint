@@ -1,15 +1,14 @@
 import minimist from 'minimist';
 import { select, checkbox } from '@inquirer/prompts';
-import chalk from 'chalk';
-import { runCommand } from "./utils";
-import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path"
-import { set } from "lodash";
-import { ChoiceOption, CommandOption, Choice } from "./types";
+import * as chalk from 'chalk';
+import { addCommand, runCommand } from './utils';
+import { resolve } from 'node:path';
+import { ChoiceOption, CommandContext, Choice } from './types';
+import { LintConfig } from './constants';
 
 const argv = minimist<{
-    template?: string
-    help?: boolean
+    template?: string;
+    help?: boolean;
 }>(process.argv.slice(2), {
     default: { help: false },
     alias: { h: 'help', t: 'template' },
@@ -17,19 +16,36 @@ const argv = minimist<{
 });
 
 const cwd = process.cwd();
-const colorList = [chalk.cyan, chalk.green, chalk.blueBright, chalk.greenBright, chalk.redBright, chalk.magenta, chalk.reset, chalk.yellow, chalk.magenta];
-const languageList = [{
-    name: 'javascript',
-    value: 'js'
-}, {
-    name: 'typescript',
-    value: 'ts'
-}];
-const frameworkList: ChoiceOption[] = [{
-    name: 'none',
-    value: undefined,
-    description: 'npm packages that don\'t require a framework'
-}, 'react', 'vue'];
+const colorList = [
+    chalk.cyan,
+    chalk.green,
+    chalk.blueBright,
+    chalk.greenBright,
+    chalk.redBright,
+    chalk.magenta,
+    chalk.reset,
+    chalk.yellow,
+    chalk.magenta,
+];
+const languageList = [
+    {
+        name: 'javascript',
+        value: 'js',
+    },
+    {
+        name: 'typescript',
+        value: 'ts',
+    },
+];
+const frameworkList: ChoiceOption[] = [
+    {
+        name: 'None of these',
+        value: undefined,
+        description: "npm packages that don't require a framework",
+    },
+    'react',
+    'vue',
+];
 const lintList: ChoiceOption[] = ['commitlint', 'eslint', 'lint-staged', 'prettier', 'stylelint'];
 const styleList: ChoiceOption[] = ['css', 'scss', 'less'];
 const pkgPath = resolve(cwd, 'package.json');
@@ -47,33 +63,35 @@ function genChoices(options: ChoiceOption[]) {
         }
         return {
             ...tempOption,
-            name: colorList[index%colorList.length](tempOption.name),
-        }
-    })
+            name: colorList[index % colorList.length](tempOption.name),
+        };
+    });
 }
 
 async function installHusky() {
     await runCommand('pnpm install husky');
-    const pkgContent = readFileSync(pkgPath, 'utf8');
-    const pkgObj = JSON.parse(pkgContent);
-    set(pkgObj, "scripts.prepare", "husky init");
-    const newPkgContent = JSON.stringify(pkgObj, null, 2);
-    writeFileSync(pkgPath, newPkgContent, 'utf-8');
+    await addCommand(pkgPath, { name: 'prepare', value: 'husky init' });
 }
 
-function genEslintConfig(config: CommandOption) {
-    const fileNames: string[] = [];
-    fileNames.push(config.language);
-    if (config.framework) fileNames.push(config.framework);
-    if (config.lints.includes('prettier')) fileNames.push('prettier');
-    const configFileName = fileNames.join('-') + '.js';
-    const configContent = readFileSync(resolve(__dirname, `../templates/eslint/${configFileName}`), 'utf8');
-    writeFileSync(resolve(cwd, 'eslint.config.js'), configContent, 'utf-8');
-}
-
-function genPrettierConfig(config: CommandOption) {
-    const configContent = readFileSync(resolve(__dirname, `../templates/prettier/index.js`), 'utf8');
-    writeFileSync(resolve(cwd, 'prettier.config.js '), configContent, 'utf-8');
+async function initFile(context: CommandContext): Promise<string[]> {
+    const needDeps: string[] = [];
+    if (context.need.eslint) {
+        LintConfig.eslint.init(context);
+        needDeps.push(...LintConfig.eslint.dependencies(context));
+    }
+    if (context.need.prettier) {
+        LintConfig.prettier.init(context);
+        needDeps.push(...LintConfig.prettier.dependencies(context));
+    }
+    if (context.need.commitLint) {
+        LintConfig.commitLint.init(context);
+        needDeps.push(...LintConfig.commitLint.dependencies(context));
+    }
+    if (context.need.styleLint) {
+        LintConfig.styleLint.init(context);
+        needDeps.push(...LintConfig.styleLint.dependencies(context));
+    }
+    return needDeps;
 }
 
 async function init() {
@@ -81,7 +99,7 @@ async function init() {
         message: 'Select a language:',
         default: 'js',
         choices: genChoices(languageList),
-    })
+    });
     const framework = await select({
         message: 'Select a framework:',
         default: undefined,
@@ -92,29 +110,30 @@ async function init() {
         choices: genChoices(lintList),
     });
     let style = 'css';
-    const config: CommandOption = {
+    const context: CommandContext = {
+        cwd,
         language,
         framework,
         lints,
-    }
-    const needEslint = lints.includes('eslint');
-    const needPrettier = lints.includes('prettier');
-    const needHusky = lints.some(lint => ['commitlint', 'lint-staged'].includes(lint));
-    const needCommitLint = lints.includes('commitlint');
-    const needStyleLint = lints.includes('styleLint');
-    if (needStyleLint) {
+        need: {
+            eslint: lints.includes('eslint'),
+            prettier: lints.includes('prettier'),
+            husky: lints.some((lint) => ['commitlint', 'lint-staged'].includes(lint)),
+            commitLint: lints.includes('commitlint'),
+            styleLint: lints.includes('styleLint'),
+        },
+    };
+    if (context.need.styleLint) {
         style = await checkbox({
             message: 'Select tools you need:',
             choices: genChoices(styleList),
         });
     }
 
-    const dependencies = [];
+    if (context.need.husky) await installHusky();
+    const dependencies = await initFile(context);
 
-
-    if (needEslint) genEslintConfig(config);
-    if (needPrettier) genPrettierConfig(config);
-    if (needHusky) await installHusky();
+    console.log(`You need install this deps ${dependencies}`);
 }
 
 init().catch((err) => {

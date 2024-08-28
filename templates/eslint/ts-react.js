@@ -1,17 +1,16 @@
-module.exports = {
-    env: {
-        browser: true,
-        es2021: true,
-        node: true,
+import globals from "globals";
+import pluginJs from "@eslint/js";
+import tseslint from "typescript-eslint";
+import pluginReact from "eslint-plugin-react";
+
+export default [
+    {
+        files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"]
     },
-    extends: [
-        'eslint:recommended'
-    ],
-    overrides: [],
-    parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
+    {
+        languageOptions: { globals: globals.browser }
     },
-    plugins: ['vue', '@typescript-eslint'],
-    rules: {},
-};
+    pluginJs.configs.recommended,
+    pluginReact.configs.flat.recommended,
+    ...tseslint.configs.recommended,
+];
